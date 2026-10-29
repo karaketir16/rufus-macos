@@ -1,5 +1,15 @@
 # Handoff — where the Rufus macOS port stands
 
+## Latest continuation: compressed images
+
+The compressed DD path is now implemented. See [`COMPRESSED-IMAGES.md`](COMPRESSED-IMAGES.md)
+for the authoritative current validation record; the older snapshot below predates this change.
+`bash scripts/build-compressors.sh` supplies pinned xz/zstd tools and license notices before building.
+The complete check harness passed inside Space `space-57caba4ef0` against scratch `disk11`, backed by
+`/Users/lume/rufus-compressed-test.q6XKcC/target.img`. Existing `disk10` was not changed by these checks.
+Never infer a current disk identity from this document: inspect the backing path before writes.
+GUI verification passed: selected `sample.img.xz`, forced DD, and wrote/verified 1 MiB on the scratch disk. Independent fixture/device SHA-256 matches; screenshots and commands are in `COMPRESSED-IMAGES.md`. No physical USB write is authorized. The latest app remains open in the Space; the old `~/RufusMac.app` is not this latest build.
+
 Last updated: 2026-10-29 (second English pass). Everything below was executed and verified in this
 session; nothing is planned-but-unrun unless it says so.
 

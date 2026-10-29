@@ -38,7 +38,11 @@ images). DD writes go through `/dev/rdiskN` behind `DiskMountGuard`, re-validate
 and after the write, and refuse an image that lives on the target disk.
 
 Not ported at all: Windows To Go (`SanPolicy=4` is coded but never offered), persistence,
-VHD/VHDX/FFU, compressed images and ext/UDF/ReFS. NTFS media with the `UEFI:NTFS` chainloader is
+VHD/VHDX/FFU and ext/UDF/ReFS. Compressed DD image support now includes gzip, bzip2, xz, zstd,
+LZMA, compress (`.Z`) and single-member ZIP command paths; verified formats and limitations are recorded in
+[`docs/COMPRESSED-IMAGES.md`](docs/COMPRESSED-IMAGES.md). Run `bash scripts/build-compressors.sh`
+before building the app or running checks to provide the pinned xz/zstd helpers.
+NTFS media with the `UEFI:NTFS` chainloader is
 **blocked by macOS**, not merely unimplemented: Apple's `ntfs.fs` driver mounts NTFS read-only, so the
 setup files cannot be copied onto it (measured in `docs/COMPLETION.md` §6). The application lists all of
 this itself under "Known limitations…".

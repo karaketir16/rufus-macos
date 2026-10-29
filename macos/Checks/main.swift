@@ -375,6 +375,119 @@ check(try !RawImage.verify(source: rawSource, destination: shortImage), "differe
 do { _ = try RawImage.verify(source: rawSource, destination: rawDestination, cancelled: { true }); fatalError("verification cancellation ignored") } catch {}
 print("Raw image verification checks passed")
 
+// MARK: - Compressed image streaming checks (no physical disk writes)
+let compressedRoot = tmpDir.appendingPathComponent(UUID().uuidString, isDirectory: true)
+try FileManager.default.createDirectory(at: compressedRoot, withIntermediateDirectories: false)
+defer { try? FileManager.default.removeItem(at: compressedRoot) }
+
+guard let bundledXZ = BundledTools.locateXZ() else { fatalError("bundled xz required for compressed checks") }
+guard let bundledZstd = BundledTools.locateZstd() else { fatalError("bundled zstd required for compressed checks") }
+
+let compressPayload = Data((0..<1_048_576).map { UInt8(truncatingIfNeeded: $0) })
+let compressSource = compressedRoot.appendingPathComponent("payload.img")
+try compressPayload.write(to: compressSource)
+
+func compressToFile(tool: String, args: [String], source: URL, destination: URL) throws {
+    FileManager.default.createFile(atPath: destination.path, contents: nil, attributes: nil)
+    let out = try FileHandle(forWritingTo: destination)
+    defer { try? out.close() }
+    let proc = Process()
+    proc.executableURL = URL(fileURLWithPath: tool)
+    proc.arguments = args + [source.path]
+    proc.standardOutput = out
+    proc.standardError = FileHandle.nullDevice
+    try proc.run()
+    proc.waitUntilExit()
+    check(proc.terminationStatus == 0, "\(tool) compression failed for \(destination.lastPathComponent)")
+}
+
+func decompressCommand(_ command: CompressedImage.Command) throws -> Data {
+    let proc = Process()
+    proc.executableURL = command.executable
+    proc.arguments = command.arguments
+    let pipe = Pipe()
+    proc.standardOutput = pipe
+    proc.standardError = FileHandle.nullDevice
+    proc.standardInput = FileHandle.nullDevice
+    try proc.run()
+    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+    proc.waitUntilExit()
+    guard proc.terminationStatus == 0 else {
+        throw CompressedImage.DecompressError.decompressionFailed(proc.terminationStatus)
+    }
+    return data
+}
+
+let gzipFile = compressedRoot.appendingPathComponent("payload.img.gz")
+let bz2File = compressedRoot.appendingPathComponent("payload.img.bz2")
+let xzFile = compressedRoot.appendingPathComponent("payload.img.xz")
+let zstFile = compressedRoot.appendingPathComponent("payload.img.zst")
+let zipFile = compressedRoot.appendingPathComponent("payload.img.zip")
+try compressToFile(tool: "/usr/bin/gzip", args: ["-c"], source: compressSource, destination: gzipFile)
+try compressToFile(tool: "/usr/bin/bzip2", args: ["-c"], source: compressSource, destination: bz2File)
+try compressToFile(tool: bundledXZ.path, args: ["-c"], source: compressSource, destination: xzFile)
+try compressToFile(tool: bundledZstd.path, args: ["-c", "--quiet"], source: compressSource, destination: zstFile)
+
+let zipProc = Process()
+zipProc.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
+zipProc.arguments = ["-jq", zipFile.path, compressSource.path]
+zipProc.standardOutput = FileHandle.nullDevice
+zipProc.standardError = FileHandle.nullDevice
+try zipProc.run()
+zipProc.waitUntilExit()
+check(zipProc.terminationStatus == 0, "zip compression failed")
+
+let compressedFormats: [(URL, CompressedImage.Format)] = [
+    (gzipFile, .gzip),
+    (bz2File, .bzip2),
+    (xzFile, .xz),
+    (zstFile, .zstd),
+    (zipFile, .zip),
+]
+for (url, expectedFormat) in compressedFormats {
+    check(CompressedImage.Format.detect(url) == expectedFormat, "format detection failed for .\(url.pathExtension)")
+    let command = try CompressedImage.command(for: url)
+    check(command.estimatedSize == nil, "unsafe size estimate returned for \(expectedFormat)")
+    let decompressed = try decompressCommand(command)
+    check(decompressed == compressPayload, "\(expectedFormat) decompression produced wrong bytes")
+}
+print("Compressed format detection and single-stream decompression checks passed")
+
+let extraFile = compressedRoot.appendingPathComponent("extra.img")
+try Data([2]).write(to: extraFile)
+let multiZip = compressedRoot.appendingPathComponent("multi.zip")
+let multiZipProc = Process()
+multiZipProc.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
+multiZipProc.arguments = ["-jq", multiZip.path, compressSource.path, extraFile.path]
+multiZipProc.standardOutput = FileHandle.nullDevice
+multiZipProc.standardError = FileHandle.nullDevice
+try multiZipProc.run()
+multiZipProc.waitUntilExit()
+check(multiZipProc.terminationStatus == 0, "multi-file zip creation failed")
+do {
+    _ = try CompressedImage.command(for: multiZip)
+    fatalError("multi-file zip accepted")
+} catch CompressedImage.DecompressError.archiveHasMultipleFiles {}
+print("Multiple-file zip rejection checks passed")
+
+let gzipBytes = try Data(contentsOf: gzipFile)
+let corruptGzip = compressedRoot.appendingPathComponent("corrupt.img.gz")
+var corruptBytes = gzipBytes
+corruptBytes[corruptBytes.count - 5] ^= 0xff
+try corruptBytes.write(to: corruptGzip)
+do {
+    _ = try decompressCommand(try CompressedImage.command(for: corruptGzip))
+    fatalError("corrupt gzip accepted")
+} catch {}
+
+let truncatedGzip = compressedRoot.appendingPathComponent("truncated.img.gz")
+try gzipBytes.prefix(gzipBytes.count / 2).write(to: truncatedGzip)
+do {
+    _ = try decompressCommand(try CompressedImage.command(for: truncatedGzip))
+    fatalError("truncated gzip accepted")
+} catch {}
+print("Corrupt and truncated compressed stream rejection checks passed")
+
 check(PartitionTable.crc32(Data("123456789".utf8)) == 0xCBF4_3926, "IEEE 802.3 CRC32 vector mismatch")
 let gptPlan = try PartitionTable.plan(scheme: .gpt(), totalBytes: 16 * 1024 * 1024 * 1024, blockSize: 512, filesystem: .fat32)
 check(gptPlan.partitions.count == 1 && gptPlan.partitions[0].firstLBA == 2048 && gptPlan.partitions[0].typeGUID == PartitionTable.microsoftBasicDataGUID, "single-partition GPT plan mismatch")
@@ -683,4 +796,60 @@ if let id = ProcessInfo.processInfo.environment["RUFUS_TEST_VIRTUAL_DISK"], let 
     } catch RawDiskWriter.WriteError.cancelled {}
 
     print("DD mode (RawDiskWriter) write and verification checks passed")
+
+    // MARK: - Compressed DD mode against the same virtual device (capacity/cancel)
+    func makeZerosCompressed(size: Int, tool: String, args: [String], destination: URL) throws {
+        let zeros = Data(count: size)
+        let zerosFile = rawRoot.appendingPathComponent(UUID().uuidString + ".img")
+        try zeros.write(to: zerosFile)
+        defer { try? FileManager.default.removeItem(at: zerosFile) }
+        FileManager.default.createFile(atPath: destination.path, contents: nil, attributes: nil)
+        let out = try FileHandle(forWritingTo: destination)
+        defer { try? out.close() }
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: tool)
+        proc.arguments = args + [zerosFile.path]
+        proc.standardOutput = out
+        proc.standardError = FileHandle.nullDevice
+        try proc.run()
+        proc.waitUntilExit()
+        check(proc.terminationStatus == 0, "\(tool) zero compression failed for \(destination.lastPathComponent)")
+    }
+
+    let smallGz = rawRoot.appendingPathComponent("small-zeros.img.gz")
+    try makeZerosCompressed(size: 1_048_576, tool: "/usr/bin/gzip", args: ["-c"], destination: smallGz)
+    let smallCompressedResult = try RawDiskWriter.writeCompressed(image: smallGz, selected: ddSnapshot, includeExternalUSBDisks: false)
+    check(smallCompressedResult.bytesWritten == 1_048_576 && smallCompressedResult.verified, "compressed DD write/verify failed for small image")
+
+    let bz2Zeros = rawRoot.appendingPathComponent("zeros.img.bz2")
+    try makeZerosCompressed(size: 1_048_576, tool: "/usr/bin/bzip2", args: ["-c"], destination: bz2Zeros)
+    let bz2Result = try RawDiskWriter.writeCompressed(image: bz2Zeros, selected: ddSnapshot, includeExternalUSBDisks: false)
+    check(bz2Result.bytesWritten == 1_048_576 && bz2Result.verified, "compressed DD write/verify failed for bzip2")
+
+    let xzZeros = rawRoot.appendingPathComponent("zeros.img.xz")
+    try makeZerosCompressed(size: 1_048_576, tool: bundledXZ.path, args: ["-c"], destination: xzZeros)
+    let xzResult = try RawDiskWriter.writeCompressed(image: xzZeros, selected: ddSnapshot, includeExternalUSBDisks: false)
+    check(xzResult.bytesWritten == 1_048_576 && xzResult.verified, "compressed DD write/verify failed for xz")
+
+    let zstZeros = rawRoot.appendingPathComponent("zeros.img.zst")
+    try makeZerosCompressed(size: 1_048_576, tool: bundledZstd.path, args: ["-c", "--quiet"], destination: zstZeros)
+    let zstResult = try RawDiskWriter.writeCompressed(image: zstZeros, selected: ddSnapshot, includeExternalUSBDisks: false)
+    check(zstResult.bytesWritten == 1_048_576 && zstResult.verified, "compressed DD write/verify failed for zstd")
+
+    let oversizedGz = rawRoot.appendingPathComponent("oversized-zeros.img.gz")
+    try makeZerosCompressed(size: Int(ddSnapshot.size) + 512, tool: "/usr/bin/gzip", args: ["-c"], destination: oversizedGz)
+    do {
+        _ = try RawDiskWriter.writeCompressed(image: oversizedGz, selected: ddSnapshot, includeExternalUSBDisks: false)
+        fatalError("oversized compressed image accepted")
+    } catch RawDiskWriter.WriteError.imageLargerThanDisk {}
+
+    let cancelGz = rawRoot.appendingPathComponent("cancel-zeros.img.gz")
+    try makeZerosCompressed(size: 8 * 1_048_576, tool: "/usr/bin/gzip", args: ["-c"], destination: cancelGz)
+    var cancelIterations = 0
+    do {
+        _ = try RawDiskWriter.writeCompressed(image: cancelGz, selected: ddSnapshot, includeExternalUSBDisks: false, cancelled: { cancelIterations += 1; return cancelIterations > 1 })
+        fatalError("compressed DD cancellation ignored")
+    } catch RawDiskWriter.WriteError.cancelled {}
+
+    print("Compressed DD mode write, capacity and cancellation checks passed")
 }

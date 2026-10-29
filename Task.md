@@ -280,6 +280,8 @@ hardware.
 
 ## L. DD (raw image) mode — 2026-10-29, second English pass
 
+Update after section L: compressed-image streaming is now implemented and verified in Cua Space `space-57caba4ef0`. The full harness passed, including virtual-device capacity and cancellation checks. GUI writing of `sample.img.xz` to scratch `disk11` reported `DD write finished: 1 MB written, verified against the image.` Independent decompressed fixture/device SHA-256 matched (`fbbab289…`). Build/dependency details, commands, exact coverage and screenshots: [`macos/docs/COMPRESSED-IMAGES.md`](macos/docs/COMPRESSED-IMAGES.md). This does not close the remaining NTFS, persistence, Windows To Go or hardware-validation gaps.
+
 Next unported Rufus path implemented and verified: writing an image byte for byte instead of copying files.
 
 | Item | Result | Evidence |

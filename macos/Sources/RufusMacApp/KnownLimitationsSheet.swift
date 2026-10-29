@@ -9,8 +9,8 @@ struct KnownLimitationsSheet: View {
         ("Disk selection", "External removable physical disks, plus external USB disks reported as fixed. Read-only inventory, identity re-validated before and after erasing."),
         ("Formatting", "GPT or MBR with FAT32 (WIM files over 4 GB are split automatically) or ExFAT."),
         ("Media layout", "Rufus' single-partition USB layout: the EFI system partition macOS creates is removed again."),
-        ("DD image mode", "Anything that is not Windows media (Linux and other hybrid images) is written byte for byte to the device and verified by reading it back."),
-        ("Windows answer file", "Full `autounattend.xml` parity: TPM/Secure Boot/RAM bypass, online-account bypass, local account, regional copy, privacy, BitLocker, S Mode, QoL tweaks, silent install."),
+        ("DD image mode", "Raw images and supported compressed images (.gz, .bz2, .xz, .lzma, .zst, .Z, .zip) are written to the device and verified by reading it back."),
+        ("Windows answer file", "Creates `autounattend.xml` for supported setup options including TPM/Secure Boot/RAM bypass, account choices, regional settings, privacy and BitLocker."),
         ("Silent install", "Edition is chosen from the image's edition list and written as `/IMAGE/INDEX`; the volume label gets the ` (SILENT)` suffix."),
         ("Media customization", "`appraiserres.dll` placeholder, `setup.exe` bypass wrapper for build 26000+, `Autounattend.xml` inside `boot.wim`, Panther fallback for answer files without a `windowsPE` pass."),
         ("2023 bootloaders", "`Windows\\Boot\\EFI_EX` and `Fonts_EX` are extracted from `boot.wim` and swapped in."),
@@ -22,8 +22,8 @@ struct KnownLimitationsSheet: View {
         ("Windows To Go", "Not implemented. It needs an NTFS volume and Windows' own `bcdboot`; there is no supported way to do it from macOS."),
         ("Offline registry hive edit", "`boot.wim`'s SYSTEM hive is not edited. The TPM/Secure Boot/RAM bypass is written through the answer file's `windowsPE` pass, which is also upstream's fallback."),
         ("NTFS media", "Blocked by macOS, not by this port: Apple's `ntfs.fs` driver mounts NTFS read-only, so the setup files cannot be copied onto it (writing needs macFUSE + ntfs-3g). Rufus' `UEFI:NTFS` layout therefore cannot be filled either."),
-        ("Linux and DD mode", "Linux ISOs, Syslinux/GRUB, FreeDOS, persistence and raw DD writing are not ported."),
-        ("Other images and filesystems", "VHD/VHDX/FFU, compressed images (`.xz`, `.gz`, `.zst`, `.bz2`), ext2/3/4, UDF and ReFS are not supported."),
+        ("Linux and other boot modes", "Linux file-copy bootloader workflows (including Syslinux/GRUB), FreeDOS and persistence are not ported. Hybrid images can be written in DD mode."),
+        ("Other images and filesystems", "VHD/VHDX/FFU, ext2/3/4, UDF and ReFS are not supported."),
         ("Windows Setup verification", "No option here has been validated by a complete Windows installation, and physical USB writes have only been exercised against disk images in a VM.")
     ]
 

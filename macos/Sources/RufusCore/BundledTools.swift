@@ -14,8 +14,28 @@ public enum BundledTools {
         return candidates.first(where: isSafeExecutable)
     }
 
-    public static func locateUefiNtfsImage(from baseDirectory: URL? = nil) -> URL? {
+    /// Bundled `xz` (`Contents/Resources/xz`) used to decompress `.xz`/`.lzma` images. macOS ships no xz.
+    public static func locateXZ(from baseDirectory: URL? = nil) -> URL? {
+        locateCompressor("xz", from: baseDirectory)
+    }
+
+    /// Bundled `zstd` (`Contents/Resources/zstd`) used to decompress `.zst` images. macOS ships no zstd.
+    public static func locateZstd(from baseDirectory: URL? = nil) -> URL? {
+        locateCompressor("zstd", from: baseDirectory)
+    }
+
+    private static func locateCompressor(_ name: String, from baseDirectory: URL?) -> URL? {
         var candidates: [URL] = []
+        if let resourceURL = Bundle.main.resourceURL {
+            candidates.append(resourceURL.appendingPathComponent(name))
+        }
+        let cwd = baseDirectory ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+        candidates.append(cwd.appendingPathComponent(".deps/compressors/\(name)"))
+        candidates.append(cwd.appendingPathComponent("macos/.deps/compressors/\(name)"))
+        return candidates.first(where: isSafeExecutable)
+    }
+
+    public static func locateUefiNtfsImage(from baseDirectory: URL? = nil) -> URL? {        var candidates: [URL] = []
         if let resourceURL = Bundle.main.resourceURL {
             candidates.append(resourceURL.appendingPathComponent("uefi-ntfs.img"))
         }

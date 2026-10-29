@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import RufusCore
+import UniformTypeIdentifiers
 
 @main
 struct RufusMacApp: App {
@@ -21,7 +22,7 @@ struct MainView: View {
     @State private var volumeLabel = "RUFUS"
     @State private var confirmDiskID = ""
     @State private var result = ""
-    @State private var status = "No ISO selected yet."
+    @State private var status = "No image selected yet."
     @State private var busy = false
     @State private var uxSelection = WindowsUserExperience.Selection.restored()
     @State private var uxReport: WindowsMediaReport?
@@ -44,7 +45,7 @@ struct MainView: View {
                 }
                 GroupBox("USB and external disks") {
                     VStack(alignment: .leading, spacing: 8) {
-                        Toggle("Also list external USB disks reported as fixed", isOn: $includeFixed)
+                        Toggle("Also list external USB disks reported as fixed", isOn: $includeFixed).disabled(busy)
                             .onChange(of: includeFixed) { _ in refreshDisks() }
                         if disks.isEmpty {
                             Text("No suitable disk found.").foregroundStyle(.secondary)
@@ -59,39 +60,40 @@ struct MainView: View {
                             .onChange(of: selectedDiskID) { newValue in
                                 captureSnapshot(for: newValue)
                             }
+                            .disabled(busy)
                         }
                         Button("Refresh disks", action: refreshDisks).disabled(busy)
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(6)
                 }
-                GroupBox("Windows ISO inspection and formatting") {
+                GroupBox("Image inspection and USB preparation") {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Button("Select ISO…", action: chooseISO).disabled(busy)
+                            Button("Select image…", action: chooseISO).disabled(busy)
                             Text(imageURL?.lastPathComponent ?? "No file selected").lineLimit(1)
                         }
-                        Button("Inspect ISO", action: inspectISO).disabled(imageURL == nil || busy)
+                        Button("Inspect image", action: inspectISO).disabled(imageURL == nil || busy || requiresDD)
                         Picker("Image mode", selection: $imageMode) {
                             ForEach(RawDiskWriter.Mode.allCases) { mode in
                                 Text(mode.title).tag(mode)
                             }
-                        }.frame(maxWidth: 460)
+                        }.frame(maxWidth: 460).disabled(busy || requiresDD)
                         Text(imageMode == .dd
-                             ? "DD images are written byte for byte and cannot be customised. Use it for Linux and other hybrid images."
+                             ? "DD images are written byte for byte and cannot be customised. Use it for Linux and other hybrid images. Compressed images (.gz, .bz2, .xz, .lzma, .zst, .Z, .zip) are always written this way."
                              : "Files are copied to a formatted disk so Windows setup files can be split and the Windows User Experience options applied.")
                             .font(.caption).foregroundStyle(.secondary)
                         Picker("Partition scheme", selection: $scheme) {
                             Text("GPT (UEFI)").tag(PhysicalUSBMediaCreator.Scheme.gpt)
                             Text("MBR (BIOS or UEFI-CSM)").tag(PhysicalUSBMediaCreator.Scheme.mbr)
-                        }.frame(maxWidth: 360)
+                        }.frame(maxWidth: 360).disabled(busy || imageMode == .dd || requiresDD)
                         Picker("File system", selection: $filesystem) {
                             Text("FAT32 (Default — WIM files over 4 GB are split automatically)").tag(PhysicalUSBMediaCreator.Filesystem.fat32)
                             Text("ExFAT").tag(PhysicalUSBMediaCreator.Filesystem.exfat)
-                        }.frame(maxWidth: 460)
+                        }.frame(maxWidth: 460).disabled(busy || imageMode == .dd || requiresDD)
                         Text("NTFS is not offered: macOS mounts NTFS read-only, so Windows setup files cannot be copied onto it.")
                             .font(.caption).foregroundStyle(.secondary)
                         HStack {
                             Text("Volume label:")
-                            TextField("RUFUS", text: $volumeLabel).frame(maxWidth: 160)
+                            TextField("RUFUS", text: $volumeLabel).frame(maxWidth: 160).disabled(busy || imageMode == .dd || requiresDD)
                         }
                         if let snapshot = selectedSnapshot {
                             Divider()
@@ -99,7 +101,7 @@ struct MainView: View {
                                 .font(.caption)
                                 .foregroundStyle(.orange)
                             HStack {
-                                TextField(snapshot.identifier, text: $confirmDiskID).frame(maxWidth: 140)
+                                TextField(snapshot.identifier, text: $confirmDiskID).frame(maxWidth: 140).disabled(busy)
                                 Button("START…", action: startPressed)
                                     .disabled(busy || imageURL == nil || confirmDiskID != snapshot.identifier)
                             }
@@ -180,16 +182,37 @@ struct MainView: View {
         }
     }
 
+    private var requiresDD: Bool { imageURL.map { RawDiskWriter.requiresDD(imageURL: $0) } ?? false }
+
     private func chooseISO() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.init(filenameExtension: "iso")!]
+        // Rufus accepts disk images and compressed disk images (src/rufus.c:2629).
+        let extensions = ["iso", "img", "gz", "gzip", "bz2", "bzip2", "xz", "lzma", "zst", "zstd", "z", "zip"]
+        panel.allowedContentTypes = extensions.compactMap { UTType(filenameExtension: $0) }
+        panel.allowsOtherFileTypes = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        if panel.runModal() == .OK { imageURL = panel.url; result = ""; status = "Ready to inspect." }
+        if panel.runModal() == .OK, let picked = panel.url {
+            imageURL = picked
+            result = ""
+            if RawDiskWriter.requiresDD(imageURL: picked) || picked.pathExtension.lowercased() == "img" {
+                imageMode = .dd
+                status = RawDiskWriter.requiresDD(imageURL: picked)
+                    ? "Compressed image selected: DD image mode will decompress and write it."
+                    : "Raw disk image selected: DD image mode will write it byte for byte."
+            } else {
+                status = "Ready to inspect."
+            }
+        }
     }
 
     private func inspectISO() {
         guard let image = imageURL else { return }
+        guard !RawDiskWriter.requiresDD(imageURL: image) else {
+            imageMode = .dd
+            status = "A compressed image cannot be inspected; DD image mode will decompress and write it."
+            return
+        }
         busy = true; result = ""; status = "Inspecting ISO…"
         DispatchQueue.global(qos: .userInitiated).async {
             let value = Result { try WindowsMediaInspector.inspectISO(image) }
@@ -218,7 +241,8 @@ struct MainView: View {
     /// existing Panther unattend.xml) → build `unattend.xml` from the choices → format, copy and customize.
     private func startPressed() {
         guard let image = imageURL, let snapshot = selectedSnapshot else { return }
-        if imageMode == .dd {
+        // Compressed images are always written in DD mode, whatever the picker says.
+        if imageMode == .dd || RawDiskWriter.requiresDD(imageURL: image) {
             startDDWrite(image: image, snapshot: snapshot)
             return
         }
@@ -254,8 +278,19 @@ struct MainView: View {
         writeProgress = 0
         status = "Preparing DD write…"
         DispatchQueue.global(qos: .userInitiated).async {
+            let compressed = RawDiskWriter.requiresDD(imageURL: image)
             let outcome = Result {
-                try RawDiskWriter.write(
+                if compressed {
+                    return try RawDiskWriter.writeCompressed(
+                        image: image,
+                        selected: snapshot,
+                        includeExternalUSBDisks: include,
+                        verify: true,
+                        statusUpdate: { message in DispatchQueue.main.async { status = message } },
+                        progress: { fraction in DispatchQueue.main.async { writeProgress = fraction } }
+                    )
+                }
+                return try RawDiskWriter.write(
                     image: image,
                     selected: snapshot,
                     includeExternalUSBDisks: include,

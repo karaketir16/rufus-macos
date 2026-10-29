@@ -1,5 +1,7 @@
 # Completion pass — closing the remaining Windows User Experience gaps
 
+Latest continuation: compressed-image DD support and its full Space check/GUI evidence are documented in [`COMPRESSED-IMAGES.md`](COMPRESSED-IMAGES.md). The dated feature inventory below predates that continuation; compressed images are no longer wholly unimplemented.
+
 Date: 2026-10-29
 Branch: `codex/macos-port`
 Scope: native macOS SwiftUI port of Rufus (`macos/`)
