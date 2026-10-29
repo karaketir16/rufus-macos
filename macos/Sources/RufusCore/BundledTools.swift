@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 import Foundation
 
 /// Resolves bundled helper tools (`wimlib-imagex`) and boot images (`uefi-ntfs.img`)

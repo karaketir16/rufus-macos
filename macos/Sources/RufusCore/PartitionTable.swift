@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 import Foundation
 
 /// Pure-Swift GPT and MBR partition table generator matching upstream `src/drive.c` (`CreatePartition`).

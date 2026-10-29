@@ -24,5 +24,8 @@ cd "$work/wimlib-$version"
 PKG_CONFIG="$PKG_CONFIG" ./configure --prefix="$prefix" --disable-shared --without-fuse --without-ntfs-3g
 make -j "$(sysctl -n hw.ncpu)"
 make install
+# Preserve the GPL license notice(s) shipped with the source.
+mkdir -p "$prefix/share/licenses/wimlib"
+cp COPYING* "$prefix/share/licenses/wimlib/"
 "$prefix/bin/wimlib-imagex" --version
 printf 'Built wimlib at %s\n' "$prefix/bin/wimlib-imagex"

@@ -7,15 +7,16 @@
 set -euo pipefail
 project_dir="$(cd "$(dirname "$0")/.." && pwd)"
 deps="$project_dir/.deps/compressors"
-work="${TMPDIR:-/tmp}/rufus-compressors"
-mkdir -p "$deps" "$work"
+work="$(mktemp -d "${TMPDIR:-/tmp}/rufus-compressors.XXXXXXXX")"
+trap 'rm -rf "$work"' EXIT
+mkdir -p "$deps"
 cd "$work"
 
 fetch() { # url sha256 output
     if [[ -f "$3" ]] && echo "$2  $3" | shasum -a 256 -c - >/dev/null 2>&1; then
         return
     fi
-    curl -sSL --max-time 300 -o "$3" "$1"
+    curl --fail -sSL --max-time 300 -o "$3" "$1"
     echo "$2  $3" | shasum -a 256 -c -
 }
 
@@ -27,7 +28,6 @@ fetch "https://tukaani.org/xz/xz-${XZ_VERSION}.tar.gz" \
 fetch "https://github.com/facebook/zstd/releases/download/v${ZSTD_VERSION}/zstd-${ZSTD_VERSION}.tar.gz" \
       eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3 "zstd.tar.gz"
 
-rm -rf "xz-${XZ_VERSION}"
 tar xzf xz.tar.gz
 (
     cd "xz-${XZ_VERSION}"
@@ -38,7 +38,6 @@ tar xzf xz.tar.gz
 cp "xz-${XZ_VERSION}/src/xz/xz" "$deps/xz"
 chmod 0755 "$deps/xz"
 
-rm -rf "zstd-${ZSTD_VERSION}"
 tar xzf zstd.tar.gz
 make -C "zstd-${ZSTD_VERSION}/programs" -j"$(sysctl -n hw.ncpu)" zstd >/dev/null
 cp "zstd-${ZSTD_VERSION}/programs/zstd" "$deps/zstd"

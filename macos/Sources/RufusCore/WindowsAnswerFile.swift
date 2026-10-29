@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 import Foundation
 
 /// Full XML answer-file generator matching `CreateUnattendXml` in upstream `src/wue.c`.

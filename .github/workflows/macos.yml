@@ -1,0 +1,31 @@
+name: macOS source checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-check:
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure build prerequisites
+        run: command -v pkg-config || brew install pkg-config
+      - name: Build pinned helper sources
+        working-directory: macos
+        run: |
+          bash scripts/build-wimlib.sh
+          bash scripts/build-compressors.sh
+      - name: Run non-device checks
+        working-directory: macos
+        run: bash scripts/check.sh
+      - name: Assemble and verify development app
+        working-directory: macos
+        run: bash scripts/build-app.sh
+
+      # No release upload and no physical-device/virtual-device opt-in in CI.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 import Foundation
 
 /// Port of upstream `ApplyWindowsCustomization()` (`src/wue.c`) for the non-Windows-To-Go case.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 import Foundation
 
 /// Port of the "Windows User Experience" selection logic of upstream Rufus (`src/rufus.c:1696-1766`).

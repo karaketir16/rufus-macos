@@ -1,0 +1,34 @@
+Disk inventory checks passed
+Checksum checks passed
+Large file and malformed input checks passed
+Windows answer file checks passed
+Bundled app removal checks passed
+QoL answer file checks passed
+Disk identity checks passed
+External disk opt-in checks passed
+Windows media inspection checks passed
+Mounted ISO checks passed
+ISO failure cleanup checks passed
+Windows media staging checks passed
+Staging failure checks passed
+ISO staging and detach checks passed
+Disk registry identity checks passed
+Read-only live disk identity check passed for 1 device(s)
+Raw image copy checks passed
+Raw copy cancellation and symlink checks passed
+Local account and encryption settings checks passed
+Full upstream Windows answer file checks passed
+Virtual media builder checks passed
+Virtual image failure cleanup checks passed
+Raw virtual media export checks passed
+Raw image verification checks passed
+Compressed format detection and single-stream decompression checks passed
+Multiple-file zip rejection checks passed
+Corrupt and truncated compressed stream rejection checks passed
+PartitionTable GPT and MBR layout checks passed
+BundledTools and PhysicalUSBMediaCreator safety gate checks passed
+Windows User Experience dialog logic checks passed
+Volume label checks passed
+md5sum update checks passed
+Install edition checks passed
+MS2023 bootloader replacement checks passed

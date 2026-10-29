@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 import Foundation
 
 /// Updates the `md5sum.txt` / `MD5SUMS` list some distributions ship at the media root, so the checksums

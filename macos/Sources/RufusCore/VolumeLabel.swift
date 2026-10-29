@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 import Foundation
 
 /// Volume-label handling, ported from `ToValidLabel()` (`src/format.c:263`) and the silent-install
