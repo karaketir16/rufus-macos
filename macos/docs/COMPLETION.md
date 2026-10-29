@@ -222,19 +222,120 @@ Interpretation:
 
 ---
 
-## 5. Remaining known gaps (also shown in-app)
+## 5. DD ("raw image") mode — new in this pass
+
+`Sources/RufusCore/RawDiskWriter.swift` (new) ports Rufus' second write mode: the image is written byte for
+byte to the whole disk instead of copying its files. It is what Linux and every other hybrid image needs,
+and upstream preselects it when the image is not Windows installation media.
+
+* `RawDiskWriter.Mode` (`fileCopy` / `dd`) is the user-visible choice; `recommendsDD(for:)` mirrors
+  upstream's preselection (no `sources/boot.wim` + no install image ⇒ DD).
+* The write goes through `/dev/rdiskN`; `DiskMountGuard` blocks Disk Arbitration from mounting anything on
+  the disk, the `DiskIdentity.Snapshot` is re-checked before the device is opened and again afterwards,
+  an image that lives on the target disk is refused (`sourceOnTargetDisk`), and the device is opened with
+  `O_EXLOCK` plus a `st_dev` comparison to defeat device swaps.
+* After writing, `F_FULLFSYNC` flushes the drive cache and the image-sized prefix is read back and compared
+  1 MiB at a time (`verificationFailed` on a mismatch). Verification runs *after* the write handle is
+  closed: a second `O_EXLOCK` open of the same device returns `EBUSY` (hit and fixed during this pass).
+* The GUI gained an **"Image mode"** picker, a progress bar with a percentage, and a caption explaining the
+  difference. Inspecting a non-Windows image switches the mode to DD automatically.
+
+### 5.1 Checks
+
+```console
+$ swiftc Sources/RufusCore/*.swift Checks/main.swift -o /tmp/rufus-mac-check
+$ RUFUS_ALLOW_VIRTUAL_DISKS=1 RUFUS_TEST_VIRTUAL_DISK=disk6 \
+  RUFUS_TEST_VIRTUAL_BACKING=/tmp/ddtest.img /tmp/rufus-mac-check | tail -3
+Virtual device write, read-back and DiskMountGuard checks passed
+VirtualDiskFormatter GPT/FAT32 and exFAT+UEFI:NTFS media preparation checks passed
+DD mode (RawDiskWriter) write and verification checks passed
+```
+
+Covered: empty/oversized/unaligned images rejected, Windows media not preselected as DD, non-Windows media
+preselected, a full write + read-back verification on a virtual device, an altered copy failing
+verification, and cancellation honoured.
+
+### 5.2 GUI run with Cua (real Windows 11 ISO written in DD mode)
+
+Space `space-57caba4ef0`, 16 GiB disk image as `disk10`, `Win11.iso` (9.05 GB), app started with
+`RUFUS_ALLOW_VIRTUAL_DISKS=1`, everything driven through the GUI:
+
+| Step | Screenshot |
+| --- | --- |
+| "Image mode" picker with both modes | `docs/verification/2026-10-29-dd-mode-picker.png` |
+| DD chosen; caption explains that DD cannot be customised | `docs/verification/2026-10-29-dd-mode-selected.png` |
+| Writing then verifying (50 %) | `docs/verification/2026-10-29-dd-verifying.png` |
+| Verifying (99 %) | `docs/verification/2026-10-29-dd-verifying-99.png` |
+| Finished: "DD write finished: 9.05 GB written, verified against the image." | `docs/verification/2026-10-29-dd-complete.png` |
+
+Independent read-back from the Space shell:
+
+```console
+$ stat -f%z /Users/lume/Win11.iso
+9047330816
+$ dd if=Win11.iso bs=1m count=64 | shasum -a 256        # first 64 MiB of the ISO
+682311289c867596792c13e091b68af350fad81a26042b6cd5de4b8c46ff89e1
+$ dd if=/dev/rdisk10 bs=1m count=64 | shasum -a 256    # first 64 MiB of the device
+682311289c867596792c13e091b68af350fad81a26042b6cd5de4b8c46ff89e1
+$ dd if=Win11.iso bs=4096 skip=2192437 count=16384 | shasum -a 256   # last 64 MiB of the ISO
+f8c50ea16dd2955b6b815c9a64d496ce91db7cc782797eb3c3591b765d13c346
+$ dd if=/dev/rdisk10 bs=4096 skip=2192437 count=16384 | shasum -a 256 # last 64 MiB of the device
+f8c50ea16dd2955b6b815c9a64d496ce91db7cc782797eb3c3591b765d13c346
+```
+
+The disk has no partition table afterwards (`diskutil list disk10` shows only the whole disk), which is the
+expected result of a raw ISO write. The app's own full-image verification had already passed.
+
+## 6. NTFS media: blocked by macOS (measured, not assumed)
+
+Upstream's NTFS path exists for the `UEFI:NTFS` chainloader: a small FAT partition with
+`res/uefi/uefi-ntfs.img` plus an NTFS data partition. The second part cannot be produced on macOS:
+
+```console
+$ ls /System/Library/Filesystems/          # Apple ships a read-only NTFS driver only
+... ntfs.fs ...
+$ ls /sbin/newfs_ntfs /usr/sbin/newfs_ntfs /usr/local/bin/mkntfs   # no formatter
+ls: ... No such file or directory
+```
+
+A formatter can be built from ntfs-3g (this pass did, proving the point):
+
+```console
+$ curl -sSL -o ntfs-3g.tgz https://tuxera.com/opensource/ntfs-3g_ntfsprogs-2022.10.3.tgz
+$ ./configure --disable-ntfs-3g --disable-mount-helper --disable-ldconfig --disable-crypto && make -j8
+$ /tmp/ntfs3g/mkntfs-static --version
+mkntfs v2022.10.3 (libntfs-3g)
+```
+
+Formatting a 64 MiB GPT image's data slice with it succeeds — and that is exactly where it stops:
+
+```console
+$ /tmp/ntfs3g/mkntfs-static -F -q -L NTFSVOL -p 2048 /dev/disk7s1
+$ diskutil info disk7s1 | grep "Volume Name"
+   Volume Name:               NTFSVOL
+$ touch /Volumes/NTFSVOL/canwrite
+touch: /Volumes/NTFSVOL/canwrite: Read-only file system
+```
+
+macOS mounts NTFS read-only, so the ~8 GB of Windows setup files cannot be copied onto the volume at all.
+Copying them through `ntfs-3g`'s offline tools (`ntfscp`) is not viable for a full media tree (no directory
+creation, thousands of files). Completing `UEFI:NTFS` therefore needs either macFUSE + ntfs-3g (a kernel
+extension the user must approve) or writing the media on Windows — a product decision, not a coding task.
+The UI and the Known-limitations sheet now say this instead of implying the mode simply is not implemented.
+
+## 7. Remaining known gaps (also shown in-app)
 
 | Gap | Why it cannot be closed here |
 | --- | --- |
 | Windows To Go | Needs an NTFS target and Windows' `bcdboot`; there is no supported macOS equivalent. |
 | Offline `SYSTEM` hive edit | No registry API on macOS. The `windowsPE` answer-file pass is used instead — upstream's own fallback. |
-| NTFS media / `UEFI:NTFS` on physical disks | Would require writing Rufus' chainloader to a second partition; not part of this port's tested scope. |
-| Linux/DD mode, persistence, VHD/VHDX/FFU, compressed images, ext/UDF/ReFS | Separate feature set, not started. |
+| NTFS media / `UEFI:NTFS` on physical disks | macOS mounts NTFS read-only (measured in §6); filling the data partition needs macFUSE + ntfs-3g or a Windows host. |
+| Persistence, VHD/VHDX/FFU, compressed images, ext/UDF/ReFS | Not started; DD mode already covers hybrid Linux ISOs that need no persistence. |
 | Full Windows Setup validation | Needs a machine that boots the produced media; the artifacts were verified at file level only. |
 
 ---
 
-## 6. Reproducing this pass
+## 8. Reproducing this pass
 
 ```console
 $ cd macos

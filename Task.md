@@ -275,3 +275,41 @@ Still open (documented in-app and in `macos/docs/COMPLETION.md` §5): Windows To
 hive editing, NTFS media with `UEFI:NTFS` on physical disks, Linux/DD mode, persistence,
 VHD/VHDX/FFU, compressed images, ext/UDF/ReFS, and a complete Windows Setup validation on real
 hardware.
+
+---
+
+## L. DD (raw image) mode — 2026-10-29, second English pass
+
+Next unported Rufus path implemented and verified: writing an image byte for byte instead of copying files.
+
+| Item | Result | Evidence |
+| --- | --- | --- |
+| `RawDiskWriter` (new, `Sources/RufusCore/RawDiskWriter.swift`) | Writes through `/dev/rdiskN` under `DiskMountGuard`, re-validates `DiskIdentity` before/after, refuses an image stored on the target disk, `F_FULLFSYNC`, then reads the image-sized prefix back and compares it 1 MiB at a time | `DD mode (RawDiskWriter) write and verification checks passed` |
+| Mode selection | `RawDiskWriter.Mode` (`fileCopy`/`dd`), `recommendsDD(for:)` mirrors upstream's preselection for non-Windows images, GUI picker + progress bar | `docs/verification/2026-10-29-dd-mode-picker.png` |
+| Checks | Empty/oversized/unaligned images, preselection rules, real write + verify on a virtual device, altered image fails, cancellation | `Checks/main.swift` (env-gated block, `RUFUS_TEST_VIRTUAL_DISK`) |
+| GUI run (Cua) | Real build-26300 ISO written in DD mode to a 16 GiB disk image: "DD write finished: 9.05 GB written, verified against the image." | `docs/verification/2026-10-29-dd-complete.png` |
+| Independent verification | First and last 64 MiB SHA-256 of ISO and device identical; device has no partition table afterwards | below |
+
+```console
+$ stat -f%z Win11.iso
+9047330816
+$ dd if=Win11.iso bs=1m count=64 | shasum -a 256
+682311289c867596792c13e091b68af350fad81a26042b6cd5de4b8c46ff89e1
+$ dd if=/dev/rdisk10 bs=1m count=64 | shasum -a 256
+682311289c867596792c13e091b68af350fad81a26042b6cd5de4b8c46ff89e1
+$ dd if=Win11.iso bs=4096 skip=2192437 count=16384 | shasum -a 256
+f8c50ea16dd2955b6b815c9a64d496ce91db7cc782797eb3c3591b765d13c346
+$ dd if=/dev/rdisk10 bs=4096 skip=2192437 count=16384 | shasum -a 256
+f8c50ea16dd2955b6b815c9a64d496ce91db7cc782797eb3c3591b765d13c346
+```
+
+**NTFS + `UEFI:NTFS`: blocked by macOS, measured.** There is no NTFS formatter in macOS and Apple's
+`ntfs.fs` mounts NTFS read-only. A static `mkntfs` was built from ntfs-3g v2022.10.3 in this pass and did
+format a GPT slice (`/Volumes/NTFSVOL`), but `touch /Volumes/NTFSVOL/canwrite` failed with
+"Read-only file system", so the Windows setup files cannot be copied onto it. Closing this needs macFUSE +
+ntfs-3g (a kernel extension the user must approve) or writing the media on Windows — see
+[`macos/docs/COMPLETION.md`](file:///Users/karaketir16/Documents/ChatGPT/Chat/rufus-source/macos/docs/COMPLETION.md) §6.
+
+Next candidates, in order: persistence partition for Linux USBs, VHD/FFU writing, compressed image
+support, then the macFUSE decision for NTFS. The port's current state and the exact commands to resume are
+in [`macos/docs/HANDOFF.md`](file:///Users/karaketir16/Documents/ChatGPT/Chat/rufus-source/macos/docs/HANDOFF.md).

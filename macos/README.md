@@ -32,9 +32,16 @@ Also implemented in the media pipeline: the ` (SILENT)` volume-label suffix for 
 `md5sum.txt`/`MD5SUMS` refresh for every file the port modifies (`UpdateMD5Sum()`); see
 [`docs/COMPLETION.md`](docs/COMPLETION.md).
 
-Not ported at all: Windows To Go (`SanPolicy=4` is coded but never offered), NTFS media with the
-`UEFI:NTFS` chainloader on physical disks, Linux/DD mode, persistence, VHD/VHDX/FFU, compressed
-images and ext/UDF/ReFS. The application lists these itself under "Known limitations…".
+Two image modes are offered, as upstream does: ISO image mode (format, copy, customise) and **DD image
+mode** (`RawDiskWriter`, byte-for-byte write with read-back verification, used for Linux and other hybrid
+images). DD writes go through `/dev/rdiskN` behind `DiskMountGuard`, re-validate the disk identity before
+and after the write, and refuse an image that lives on the target disk.
+
+Not ported at all: Windows To Go (`SanPolicy=4` is coded but never offered), persistence,
+VHD/VHDX/FFU, compressed images and ext/UDF/ReFS. NTFS media with the `UEFI:NTFS` chainloader is
+**blocked by macOS**, not merely unimplemented: Apple's `ntfs.fs` driver mounts NTFS read-only, so the
+setup files cannot be copied onto it (measured in `docs/COMPLETION.md` §6). The application lists all of
+this itself under "Known limitations…".
 
 A read-only mounted-image inspector identifies common Windows UEFI bootloader names, install/boot images and files exceeding FAT32's single-file limit. It rejects symbolic links and unexpected file types. These findings do not establish that an image or device is bootable; real ISO and firmware validation remains outstanding.
 The inspector can also attach a local ISO read-only with `hdiutil`, inspect it and detach it. The checks generate and mount a temporary test ISO and exercise an invalid image; no external disk is written. Detach failures are surfaced and can leave a mount point requiring manual cleanup.

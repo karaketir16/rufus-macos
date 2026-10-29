@@ -4,8 +4,12 @@ func plist(_ value: [String: Any]) throws -> Data { try PropertyListSerializatio
 let valid: [String: Any] = ["DeviceIdentifier": "disk4", "WholeDisk": true, "Internal": false, "RemovableMedia": true, "VirtualOrPhysical": "Physical", "TotalSize": 16000000000]
 check(try DiskInventory.parseInfo(plist(valid)) != nil, "valid USB rejected")
 for changes: [String: Any] in [["Internal": true], ["RemovableMedia": false], ["WholeDisk": false], ["VirtualOrPhysical": "Virtual"], ["DeviceIdentifier": "disk4s1"], ["TotalSize": 0]] {
-    check(try DiskInventory.parseInfo(plist(valid.merging(changes) { _, new in new })) == nil, "unsafe disk accepted")
+    check(try DiskInventory.parseInfo(plist(valid.merging(changes) { _, new in new }), allowVirtualDisks: false) == nil, "unsafe disk accepted")
 }
+// The virtual-disk escape hatch is only enabled explicitly.
+let virtualPlist = try plist(valid.merging(["VirtualOrPhysical": "Virtual"]) { _, new in new })
+check(try DiskInventory.parseInfo(virtualPlist, allowVirtualDisks: true) != nil, "virtual disk rejected in development mode")
+check(try DiskInventory.parseInfo(virtualPlist, allowVirtualDisks: false) == nil, "virtual disk accepted without development mode")
 var missing = valid
 missing.removeValue(forKey: "RemovableMedia")
 check(try DiskInventory.parseInfo(plist(missing)) == nil, "missing metadata accepted")
@@ -657,4 +661,26 @@ if let id = ProcessInfo.processInfo.environment["RUFUS_TEST_VIRTUAL_DISK"], let 
         }
     }
     print("VirtualDiskFormatter GPT/FAT32 and exFAT+UEFI:NTFS media preparation checks passed")
+    // DD mode (RawDiskWriter) against the same virtual device
+    let ddSnapshot = DiskIdentity.Snapshot(identifier: id, size: snapshot.capacity, registryEntryID: try DiskIdentity.registryID(id))
+    check(RawDiskWriter.validate(imageSize: 0, diskSize: 100) == .invalidImage, "empty image accepted for DD")
+    check(RawDiskWriter.validate(imageSize: 1024, diskSize: 512) == .imageLargerThanDisk, "oversized image accepted for DD")
+    check(RawDiskWriter.validate(imageSize: 513, diskSize: 4096) == .invalidImage, "unaligned image accepted for DD")
+    check(RawDiskWriter.validate(imageSize: 512, diskSize: 512) == nil, "valid DD image rejected")
+    check(!RawDiskWriter.recommendsDD(for: uxReport(build: 26100)), "Windows media must default to image mode")
+    check(RawDiskWriter.recommendsDD(for: WindowsMediaReport(architectures: [.amd64], installImage: nil, oversizedFiles: [], hasBootImage: false)), "non-Windows image must default to DD mode")
+    var ddProgressValues: [Double] = []
+    let ddResult = try RawDiskWriter.write(image: deviceSource, selected: ddSnapshot, includeExternalUSBDisks: false, progress: { ddProgressValues.append($0) })
+    check(ddResult.bytesWritten == UInt64(pattern.count) && ddResult.verified, "DD write/verify failed")
+    check(ddProgressValues.last.map { $0 > 0.99 } == true, "DD progress never reached 100%")
+    var alteredDD = pattern; alteredDD[1_000_001] ^= 0xff
+    let alteredDDURL = rawRoot.appendingPathComponent("dd-altered.img")
+    try alteredDD.write(to: alteredDDURL)
+    check(try !RawDiskWriter.verifyUnguarded(image: alteredDDURL, imageSize: UInt64(pattern.count), identifier: id, expected: ddSnapshot, includeExternalUSBDisks: false), "altered image verified in DD mode")
+    do {
+        _ = try RawDiskWriter.write(image: deviceSource, selected: ddSnapshot, includeExternalUSBDisks: false, cancelled: { true })
+        fatalError("DD cancellation ignored")
+    } catch RawDiskWriter.WriteError.cancelled {}
+
+    print("DD mode (RawDiskWriter) write and verification checks passed")
 }
