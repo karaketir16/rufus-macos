@@ -95,6 +95,13 @@ Every user-visible string in `RufusMacApp.swift`, `WindowsUserExperienceSheet.sw
 English. The only Turkish identifiers left in the source are the reserved Windows account names in
 `WindowsAnswerFile.swift` (`administratör` and friends), which are data, not UI.
 
+Checked in the built app as well:
+
+```console
+$ strings -a .build/RufusMac.app/Contents/MacOS/RufusMac | grep -E "[çğıöşüÇĞİÖŞÜ]"
+(no output)
+```
+
 ---
 
 ## 3. Automated checks
@@ -128,6 +135,13 @@ New checks:
 | Silent install with `editionIndex: 2` | `<Key>/IMAGE/INDEX</Key><Value>2</Value>`, `<WillWipeDisk>true</WillWipeDisk>`, `<WillShowUI>OnError</WillShowUI>` |
 | Unknown edition index | falls back to the first image |
 | No edition list at all | falls back to 1 |
+
+The same harness was also run against the real ISO:
+
+```console
+$ RUFUS_TEST_WINDOWS_ISO=.../Windows11_Client_x64_en-us_26300_9457.iso /tmp/rufus-mac-check | tail -1
+Real Windows ISO build detection passed (build 26300)
+```
 
 ---
 
