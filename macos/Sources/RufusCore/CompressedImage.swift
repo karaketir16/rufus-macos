@@ -1,4 +1,6 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Osman Karaketir
+// See LICENSES/MIT.txt at the repository root.
 import Foundation
 import Darwin
 
@@ -132,4 +134,3 @@ public enum CompressedImage {
             .filter { !$0.isEmpty }
     }
 }
-

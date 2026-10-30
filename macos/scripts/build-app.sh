@@ -67,6 +67,7 @@ require "$project_dir/.deps/compressors/licenses/zstd/LICENSE" file
 require "$project_dir/.deps/wimlib-1.14.5/share/licenses/wimlib/COPYING" file
 mkdir -p "$app/Contents/Resources/licenses"
 cp "$project_dir/../LICENSE.txt" "$app/Contents/Resources/licenses/Rufus-GPL-3.0.txt"
+cp "$project_dir/../LICENSES/MIT.txt" "$app/Contents/Resources/licenses/MIT.txt"
 cp "$project_dir/../THIRD_PARTY_NOTICES.md" "$app/Contents/Resources/licenses/THIRD_PARTY_NOTICES.md"
 cp "$project_dir/../res/uefi/readme.txt" "$app/Contents/Resources/licenses/UEFI-NTFS-NOTICE.txt"
 cp "$project_dir/../res/icons/license.txt" "$app/Contents/Resources/licenses/SETUP-ICON-NOTICE.txt"

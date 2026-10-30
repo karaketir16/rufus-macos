@@ -79,4 +79,4 @@ The [verification summary](macos/docs/VERIFICATION.md) links the recorded checks
 
 ## License and attribution
 
-The port is derived from Rufus and licensed **GPL-3.0-or-later**; retain [LICENSE.txt](LICENSE.txt), upstream attribution and the [component notices](THIRD_PARTY_NOTICES.md). Bundled resources retain their own notices and source obligations. Review those obligations before distributing binaries.
+The combined port is derived from Rufus and licensed **GPL-3.0-or-later**; retain [LICENSE.txt](LICENSE.txt), upstream attribution and the [component notices](THIRD_PARTY_NOTICES.md). Two independently implemented files—`CompressedImage.swift` and `build-compressors.sh`—are separately available under **MIT**, as precisely scoped in [LICENSES/README.md](LICENSES/README.md). This does not relicense the entire commit or application. Bundled resources retain their own notices and source obligations. Review those obligations before distributing binaries.

@@ -2,6 +2,8 @@
 
 This independent macOS port derives from **Rufus**, copyright Pete Batard and upstream contributors, under GPL-3.0-or-later. The license text is in [LICENSE.txt](LICENSE.txt); the exact upstream baseline is in [PROVENANCE.md](PROVENANCE.md). No upstream endorsement is implied.
 
+File-level exception: `macos/Sources/RufusCore/CompressedImage.swift` and `macos/scripts/build-compressors.sh` are offered under MIT, copyright (c) 2026 Osman Karaketir. See [the exact scope](LICENSES/README.md) and [MIT text](LICENSES/MIT.txt). The combined application remains GPL-3.0-or-later; downloaded tools, upstream assets and other source files are not covered by that MIT grant.
+
 ## Retained Rufus resources
 
 - **Windows Setup wrappers:** `res/setup/setup_x64.exe` and `setup_arm64.exe`, retained from the recorded Rufus commit. Corresponding C source, resource definitions and Visual Studio build files are in `res/setup/`. See its original `readme.txt` and source headers. Wrapper source is GPL-3.0-or-later.

@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Osman Karaketir
+# See LICENSES/MIT.txt at the repository root.
 # Builds the two compressors the app needs but macOS does not ship: xz (for .xz/.lzma) and
 # zstd (for .zst). Both are pinned, checksummed, built statically-ish and copied to
 # .deps/compressors/, from where scripts/build-app.sh bundles them into the .app.
